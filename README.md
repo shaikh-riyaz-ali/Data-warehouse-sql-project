@@ -1,44 +1,185 @@
-# Data-warehouse-sql-project
-Building a modren Data warehouse  with Sql Server, including ETL Processes, data modeling, and analytics.
+# SQL Data Warehouse & Analytics Project
 
-# Welcome to the **Data Warehouse and Analytics Project** repository! 🚀
+An end-to-end data analytics project that builds a modern data warehouse in **SQL Server** using the **Medallion Architecture (Bronze → Silver → Gold)**, and delivers business insights through **exploratory data analysis (EDA)**, **SQL-based reporting**, and an interactive **Power BI dashboard**.
 
-This project demonstrates a comprehensive data warehousing and analytics solution, from building a data warehouse to generating actionable insights.
-
----
-
-## 🚀 Project Requirements
-
-### Building the Data Warehouse (Data Engineering)
-
-#### Objective
-
-Develop a modern data warehouse using SQL Server to consolidate sales data, enabling analytical reporting and informed decision-making.
-
-#### Specifications
-
-- **Data Sources**: Import data from two source systems (ERP and CRM) provided as CSV files.
-- **Data Quality**: Cleanse and resolve data quality issues prior to analysis.
-- **Integration**: Combine both sources into a single, user-friendly data model designed for analytical queries.
-- **Scope**: Focus on the latest dataset only; historization of data is not required.
-- **Documentation**: Provide clear documentation of the data model to support both business stakeholders and analytics teams.
+This project simulates a real-world business scenario: consolidating data from two separate source systems — a **CRM** and an **ERP** — into a single, clean, analysis-ready data warehouse.
 
 ---
 
-## BI: Analytics & Reporting (Data Analytics)
+## 📌 Project Overview
 
-#### Objective
-
-Develop SQL-based analytics to deliver detailed insights into:
-
-- **Customer Behavior**
-- **Product Performance**
-- **Sales Trends**
-
-- These insights empower stakeholders with key business metrics, enabling strategic decision-making.
+| | |
+|---|---|
+| **Database** | SQL Server |
+| **Architecture** | Medallion (Bronze / Silver / Gold) |
+| **Source Systems** | CRM (customer, product, sales data), ERP (location, customer demographics, product category) |
+| **Reporting Layer** | SQL Views (Star Schema) + Power BI Dashboard |
+| **Data Format** | CSV files |
 
 ---
 
-## 🛡️ License
+## 🏗️ Architecture
 
-This project is licensed under the [MIT License](LICENSE). You are free to use, modify, and share this project with proper attribution.
+```
+Source Systems (CRM + ERP CSV files)
+        │
+        ▼
+┌─────────────────┐
+│   BRONZE LAYER   │  Raw data, loaded as-is via BULK INSERT
+└─────────────────┘
+        │
+        ▼
+┌─────────────────┐
+│   SILVER LAYER   │  Cleaned, standardized, deduplicated data
+└─────────────────┘
+        │
+        ▼
+┌─────────────────┐
+│    GOLD LAYER    │  Business-ready Star Schema (Fact & Dimension views)
+└─────────────────┘
+        │
+        ▼
+   Power BI Dashboard / SQL Analytics & Reporting
+```
+
+**Why Medallion Architecture?**
+- **Bronze** — preserves raw source data exactly as received, for traceability and reprocessing
+- **Silver** — applies data cleaning, standardization, and business rules
+- **Gold** — models data into a Star Schema optimized for reporting and analytics
+
+---
+
+## 🗂️ Data Sources
+
+**CRM System**
+- `cust_info.csv` — customer master data
+- `prd_info.csv` — product master data
+- `sales_details.csv` — sales transactions
+
+**ERP System**
+- `LOC_A101.csv` — customer location/country data
+- `CUST_AZ12.csv` — customer birthdate & gender
+- `PX_CAT_G1V2.csv` — product category, subcategory, and maintenance info
+
+---
+
+## ⚙️ ETL Process
+
+### Bronze Layer (`bronze.load_bronze`)
+- Truncates and reloads all bronze tables using `BULK INSERT`
+- Loads raw CRM and ERP CSV files with no transformation
+- Includes load-duration logging and `TRY/CATCH` error handling
+
+### Silver Layer (`silver.load_silver`)
+Key transformations applied:
+- **Deduplication** — keeps the most recent customer record using `ROW_NUMBER()`
+- **Standardization** — normalizes coded values (e.g., `M`/`F` → `Male`/`Female`, `S`/`M` → `Single`/`Married`)
+- **Data validation** — nulls out invalid/future birthdates, fixes malformed date integers
+- **Business rule correction** — recalculates sales amount when it doesn't match `quantity × price`; derives missing prices
+- **Key parsing** — extracts category ID and clean product key from composite product keys
+- **Historization** — calculates product `end_date` using `LEAD()` based on the next start date
+
+### Gold Layer (SQL Views — Star Schema)
+- `gold.dim_customers` — customer dimension (merged CRM + ERP data, with fallback logic for gender)
+- `gold.dim_products` — product dimension (current/active products only, joined with category data)
+- `gold.fact_sales` — sales fact table (linked to dimensions via surrogate keys)
+
+---
+
+## 📊 Analysis Performed
+
+### Exploratory Data Analysis (EDA)
+- Database/schema/table exploration
+- Measures of scale: total sales, total orders, total quantity, average price
+- Time-based exploration: order date range, customer age range
+- Magnitude analysis: totals by country, category, gender
+
+### Advanced Analytics
+- **Change over time analysis** — monthly/yearly sales trends, running totals
+- **Cumulative analysis** — running total of sales over time
+- **Performance analysis** — year-over-year product sales vs. average and prior year
+- **Part-to-whole analysis** — percentage contribution of each category to total sales
+- **Data segmentation** — products segmented into cost ranges; customers segmented into **VIP / Regular / New** based on spending and lifespan
+- **Customer Report** (SQL View: `gold.report_customers`) — consolidated customer profile with recency, average order value, and average monthly spend
+
+---
+
+## 📈 Power BI Dashboard
+
+A 3-page interactive Power BI dashboard was built on top of the Gold layer views:
+
+1. **Executive Sales Overview** — KPIs (Total Sales, Orders, Quantity, Avg Order Value), sales trend (with YoY comparison), top products, sales by category and country
+2. **Product Analysis** — product-level performance table, top 5 / bottom 5 products by revenue, sales by product line
+3. **Customer Analytics** — customer segmentation (VIP/Regular/New), age group distribution, sales by country and gender
+
+**Key DAX features used:**
+- Time-intelligence measures (YoY sales growth using `SAMEPERIODLASTYEAR`)
+- Calculated columns for customer age, age group, and dynamic customer segmentation (using `RELATEDTABLE`)
+- Defensive measures (`+0`, `DIVIDE` with fallback) to handle blank/zero results across filter combinations
+
+---
+
+## 🔍 Key Insight / Data Quality Finding
+
+During dashboard development, the **Components** product category appeared to have zero sales. Rather than assuming this was a bug, the discrepancy was traced back through SQL:
+
+```sql
+SELECT p.cat_id, SUM(f.sales_amount) AS total_sales, COUNT(*) AS row_count
+FROM silver.crm_sales_details f
+JOIN silver.crm_prd_info p ON f.sls_prd_key = p.prd_key
+GROUP BY p.cat_id;
+```
+
+This confirmed that **Components (e.g., frames, pedals) are never sold as standalone SKUs** — they exist only as sub-parts used to assemble finished bikes. This was a genuine business pattern, not a data pipeline defect, and the dashboard was adjusted (filtered/labeled) to reflect this accurately rather than showing misleading data.
+
+---
+
+## 🛠️ Tech Stack
+
+- **Database:** SQL Server, T-SQL
+- **ETL:** Stored Procedures, BULK INSERT, TRY/CATCH error handling
+- **Data Modeling:** Medallion Architecture, Star Schema (Fact & Dimension views)
+- **SQL Techniques:** CTEs, Window Functions (`ROW_NUMBER`, `LEAD`, `LAG`), Aggregations, Views
+- **Visualization:** Power BI, DAX, Power Query
+
+---
+
+## 📁 Project Structure
+
+```
+├── scripts/
+│   ├── init_database.sql          -- Creates database and schemas
+│   ├── ddl_bronze.sql              -- Bronze layer table definitions
+│   ├── ddl_silver.sql              -- Silver layer table definitions
+│   ├── ddl_gold.sql                -- Gold layer views (Star Schema)
+│   ├── proc_load_bronze.sql        -- Bronze layer ETL stored procedure
+│   ├── proc_load_silver.sql        -- Silver layer ETL stored procedure
+├── analysis/
+│   ├── eda_scripts.sql             -- Exploratory data analysis queries
+│   ├── advanced_analytics.sql      -- Trend, segmentation, and performance analysis
+│   ├── report_customers.sql        -- Customer analytics report view
+├── dashboard/
+│   └── powerbi_dashboard.pbix      -- 3-page Power BI dashboard
+└── README.md
+```
+
+---
+
+## 🚀 How to Run
+
+1. Run `init_database.sql` to create the `DataWarehouse` database and schemas
+2. Run the DDL scripts to create Bronze, Silver, and Gold layer tables/views
+3. Update file paths in `proc_load_bronze.sql` to point to your local CSV files
+4. Execute the ETL procedures in order:
+   ```sql
+   EXEC bronze.load_bronze;
+   EXEC silver.load_silver;
+   ```
+5. Query the Gold layer views for analysis, or connect Power BI Desktop to the database and select the Gold views to build/refresh the dashboard
+
+---
+
+## 📌 Notes
+
+- This project was built for learning and portfolio purposes, using a sample CRM/ERP dataset
+- Data quality issues found during development (e.g., NULL categories, unmatched product keys) were investigated and documented rather than silently ignored, reflecting real-world data analyst workflows
