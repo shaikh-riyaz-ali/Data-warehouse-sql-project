@@ -147,19 +147,41 @@ This confirmed that **Components (e.g., frames, pedals) are never sold as standa
 ## 📁 Project Structure
 
 ```
-├── scripts/
-│   ├── init_database.sql          -- Creates database and schemas
-│   ├── ddl_bronze.sql              -- Bronze layer table definitions
-│   ├── ddl_silver.sql              -- Silver layer table definitions
-│   ├── ddl_gold.sql                -- Gold layer views (Star Schema)
-│   ├── proc_load_bronze.sql        -- Bronze layer ETL stored procedure
-│   ├── proc_load_silver.sql        -- Silver layer ETL stored procedure
-├── analysis/
-│   ├── eda_scripts.sql             -- Exploratory data analysis queries
-│   ├── advanced_analytics.sql      -- Trend, segmentation, and performance analysis
-│   ├── report_customers.sql        -- Customer analytics report view
-├── dashboard/
-│   └── powerbi_dashboard.pbix      -- 3-page Power BI dashboard
+Data-warehouse-sql-project/
+│
+├── datasets/                          -- Raw source CSV files
+│   ├── source_crm/
+│   │   ├── cust_info.csv
+│   │   ├── prd_info.csv
+│   │   └── sales_details.csv
+│   └── source_erp/
+│       ├── CUST_AZ12.csv
+│       ├── LOC_A101.csv
+│       └── PX_CAT_G1V2.csv
+│
+├── docs/                              -- Project documentation
+│   ├── data_catalog.md                -- Descriptions of Gold layer tables/columns
+│   └── naming_conventions.md          -- Naming standards used across the project
+│
+├── scripts/                           -- All SQL scripts (DDL + ETL)
+│   ├── init_database.sql              -- Creates database and schemas
+│   ├── bronze/
+│   │   ├── ddl_bronze.sql             -- Bronze layer table definitions
+│   │   └── proc_load_bronze.sql       -- Bronze layer ETL stored procedure
+│   ├── silver/
+│   │   ├── ddl_silver.sql             -- Silver layer table definitions
+│   │   └── proc_load_silver.sql       -- Silver layer ETL stored procedure
+│   └── gold/
+│       └── ddl_gold.sql               -- Gold layer views (Star Schema)
+│
+├── tests/                             -- Data quality checks
+│   ├── quality_checks_silver.sql      -- Validation checks after Silver load
+│   ├── quality_checks_gold.sql        -- Validation checks on Gold views
+│   └── EDA/                           -- Exploratory data analysis & advanced analytics scripts
+│
+├── dashboard/                         -- Power BI dashboard file
+│   └── powerbi_dashboard.pbix
+│
 └── README.md
 ```
 
@@ -167,15 +189,19 @@ This confirmed that **Components (e.g., frames, pedals) are never sold as standa
 
 ## 🚀 How to Run
 
-1. Run `init_database.sql` to create the `DataWarehouse` database and schemas
-2. Run the DDL scripts to create Bronze, Silver, and Gold layer tables/views
-3. Update file paths in `proc_load_bronze.sql` to point to your local CSV files
+1. Run `scripts/init_database.sql` to create the `DataWarehouse` database and schemas
+2. Run the DDL scripts in order to create the Bronze, Silver, and Gold layer tables/views:
+   - `scripts/bronze/ddl_bronze.sql`
+   - `scripts/silver/ddl_silver.sql`
+   - `scripts/gold/ddl_gold.sql`
+3. Update the file paths inside `scripts/bronze/proc_load_bronze.sql` to point to your local copies of the CSV files in `datasets/source_crm/` and `datasets/source_erp/`
 4. Execute the ETL procedures in order:
    ```sql
    EXEC bronze.load_bronze;
    EXEC silver.load_silver;
    ```
-5. Query the Gold layer views for analysis, or connect Power BI Desktop to the database and select the Gold views to build/refresh the dashboard
+5. (Optional) Run the scripts in `tests/` to validate data quality after each load
+6. Query the Gold layer views for analysis (see `tests/EDA/`), or connect Power BI Desktop to the database and select the Gold views to build/refresh the dashboard
 
 ---
 
